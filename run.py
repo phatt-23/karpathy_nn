@@ -4,7 +4,6 @@ import math
 import random
 from pprint import pprint 
 from graphviz import Digraph
-from graphviz.parameters import engines
 
 class Value:
     def __init__(self, data, _children=(), _op='', label=''):
@@ -168,6 +167,9 @@ class Neuron:
         out = act.tanh()
         return out
 
+    def parameters(self):
+        return self.w + [self.b]
+
 class Layer:
 
     def __init__(self, num_in, num_out):
@@ -176,6 +178,9 @@ class Layer:
     def __call__(self, x):
         outs = [n(x) for n in self.neurons]
         return outs
+
+    def parameters(self):
+        return [p for n in self.neurons for p in n.parameters()] 
 
 class MLP:
 
@@ -187,6 +192,9 @@ class MLP:
         for layer in self.layers:
             x = layer(x) 
         return x
+
+    def parameters(self):
+        return [p for l in self.layers for p in l.parameters()]
 
 def main():
     x1 = Value(2.0, label='x1')
@@ -238,30 +246,43 @@ def main():
         [1.0],
     ]
 
-    mlp = MLP(3, [4, 4, 1])
-    ypred = [mlp(x) for x in xs]
+    mlp = MLP(3, [16, 16, 1])
 
-    ys_vals = [[Value(y)] if not isinstance(y, list) else [Value(v) for v in y] for y in ys]
-    losses: list[Value] = [(a - d)**2 for yvs,ypr in zip(ys_vals, ypred) for d,a in zip(yvs,ypr)]
-    loss = sum(losses, start=Value(0));
+    step_size = 0.0001
+    epochs = 2000
+    for _ in range(epochs):
 
-    print('actual:')
-    pprint(ypred)
-    print()
+        # forward pass
+        ypred = [mlp(x) for x in xs]
+        ys_vals = [[Value(y)] if not isinstance(y, list) else [Value(v) for v in y] for y in ys]
+        losses = [(a - d)**2 for yvs,ypr in zip(ys_vals, ypred) for d,a in zip(yvs,ypr)]
+        loss = sum(losses, start=Value(0));
 
-    print('desired:')
-    pprint(ys)
-    print()
+        # print state
+        # print('------------------------------------')
+        # print('actual:')
+        # pprint(ypred)
+        # print()
+        #
+        # print('desired:')
+        # pprint(ys)
+        # print()
+        #
+        # print('losses:')
+        # pprint(losses)
+        # print()
+        #
+        # print('loss:', loss)
+        # print('------------------------------------')
 
-    print('losses:')
-    pprint(losses)
-    print()
+        # backward pass
+        loss.backward()
 
-    print('loss:', loss)
-    
-    loss.backward()
-
-    draw_dot(loss).render()
+        # upadate
+        for p in mlp.parameters():
+            p.data += p.grad * (-step_size)
+        
+        # draw_dot(loss).render()
 
 if __name__ == '__main__': 
     main()
