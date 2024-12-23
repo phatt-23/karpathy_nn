@@ -2,6 +2,8 @@
 
 import math
 import random
+import numpy as np
+import matplotlib.pyplot as plt
 from pprint import pprint 
 from graphviz import Digraph
 
@@ -245,44 +247,40 @@ def main():
         [-1.0],
         [1.0],
     ]
+    ys_vals = [[Value(y)] if not isinstance(y, list) else [Value(v) for v in y] for y in ys]
 
     mlp = MLP(3, [16, 16, 1])
 
-    step_size = 0.0001
-    epochs = 2000
-    for _ in range(epochs):
+    step_size = 0.01
+    epochs = 1000
+
+    losses = []
+    for e in range(epochs):
 
         # forward pass
-        ypred = [mlp(x) for x in xs]
-        ys_vals = [[Value(y)] if not isinstance(y, list) else [Value(v) for v in y] for y in ys]
-        losses = [(a - d)**2 for yvs,ypr in zip(ys_vals, ypred) for d,a in zip(yvs,ypr)]
-        loss = sum(losses, start=Value(0));
+        y_pred = [mlp(x) for x in xs]
+        y_losses = [(a - d)**2 for yvs,ypr in zip(ys_vals, y_pred) for d,a in zip(yvs,ypr)]
+        loss = sum(y_losses, start=Value(0));
+
+        losses.append(loss.data)
 
         # print state
-        # print('------------------------------------')
-        # print('actual:')
-        # pprint(ypred)
-        # print()
-        #
-        # print('desired:')
-        # pprint(ys)
-        # print()
-        #
-        # print('losses:')
-        # pprint(losses)
-        # print()
-        #
-        # print('loss:', loss)
-        # print('------------------------------------')
+        print('e:', e, 'loss:', loss.data)
 
         # backward pass
+        loss.zero_grad()
         loss.backward()
 
-        # upadate
+        # update
         for p in mlp.parameters():
             p.data += p.grad * (-step_size)
         
-        # draw_dot(loss).render()
+        if e == epochs - 1:
+            draw_dot(y_pred[0][0]).render()
+
+    plt.plot(np.arange(0, epochs, 1), losses, linewidth=2.0)
+    plt.show()
+
 
 if __name__ == '__main__': 
     main()
