@@ -1,10 +1,10 @@
 #!/bin/python
 
 import math
-import pprint as pp 
-import numpy as np
 import random
+from pprint import pprint 
 from graphviz import Digraph
+from graphviz.parameters import engines
 
 class Value:
     def __init__(self, data, _children=(), _op='', label=''):
@@ -92,7 +92,7 @@ class Value:
     def __pow__(self, other):
         assert isinstance(other, (int, float)), "Value object only supports powers of integers or floats."
 
-        out = Value(self.data**other, (self, ), f'**{other}', label='**%.4f' % (other, ))
+        out = Value(self.data**other, (self, ), f'**{other}')
 
         def _backward():
             self.grad += other * self.data ** (other - 1) * out.grad
@@ -133,24 +133,30 @@ def trace(root: Value):
     return nodes, edges
 
 
-def draw_dot(root: Value, filename='expr_graph.pdf'):
-    dot = Digraph(filename=filename, format='pdf', graph_attr={'rankdir': 'LR'})
-    nodes, edges = trace(root)
-    for n in nodes:
-        uid = str(id(n))
-        dot.node(name=uid, label='{ %s | data %.4f | grad %.4f}' % (n.label, n.data, n.grad), shape='record')
-        if not n._op:
-            continue
-        dot.node(name=uid + n._op, label=n._op)
-        dot.edge(uid + n._op, uid)
+def draw_dot(root: Value | list[Value], filename='expr_graph'):
+    roots = root if isinstance(root, list) else [root]
 
-    for n1, n2 in edges:
-        dot.edge(str(id(n1)), str(id(n2)) + n2._op)
+    dot = Digraph(filename=filename, format='pdf', graph_attr={'rankdir': 'LR'}, engine='dot')
+
+    for root in roots:
+        nodes, edges = trace(root)
+        for n in nodes:
+            uid = str(id(n))
+            dot.node(name=uid, label='{ %s | data %.4f | grad %.4f}' % (n.label, n.data, n.grad), shape='record')
+            if not n._op:
+                continue
+            dot.node(name=uid + n._op, label=n._op)
+            dot.edge(uid + n._op, uid)
+
+        for n1, n2 in edges:
+            dot.edge(str(id(n1)), str(id(n2)) + n2._op)
+
     return dot
 
 class Neuron:
-    def __init__(self, num_of_inputs):
-        self.w = [Value(random.uniform(-1,1)) for _ in range(num_of_inputs)]
+
+    def __init__(self, num_in):
+        self.w = [Value(random.uniform(-1,1)) for _ in range(num_in)]
         self.b = Value(random.uniform(-1,1))
 
     def __repr__(self):
@@ -161,6 +167,26 @@ class Neuron:
         act = sum((wi*xi for wi, xi in zip(self.w, x)), self.b)
         out = act.tanh()
         return out
+
+class Layer:
+
+    def __init__(self, num_in, num_out):
+        self.neurons = [Neuron(num_in) for _ in range(num_out)]
+
+    def __call__(self, x):
+        outs = [n(x) for n in self.neurons]
+        return outs
+
+class MLP:
+
+    def __init__(self, num_in: int, num_hiddens: list[int]):
+        sz = [num_in] + num_hiddens 
+        self.layers = [Layer(sz[i], sz[i+1]) for i in range(len(num_hiddens))]
+    
+    def __call__(self, x) -> list[Value]: 
+        for layer in self.layers:
+            x = layer(x) 
+        return x
 
 def main():
     x1 = Value(2.0, label='x1')
@@ -182,12 +208,60 @@ def main():
     o.backward()
     draw_dot(o).render()
     
-    input = [2.0, 3.0]
-    neuron = Neuron(2)
-    neuron(input)
-    print(neuron)
-    print(neuron(input))
+    # input = [2.0, 3.0]
+    # neuron = Neuron(2)
+    # neuron(input)
+    # print(neuron)
+    # print(neuron(input))
+    
+    # input = [2.0, 3.0, -1.0]
+    # layer = Layer(2,3)
+    # out = layer(input)
+    # print(out)
+    
+    # x = [2.0, 3.0, -1.0]
+    # n = MultiLayerPerceptron(3, [4,4,1])
+    # o = n(x)
+    # o[0].backward()
+    # draw_dot(o).render()
+    
+    xs = [
+        [2.0, 3.0, -1.0],
+        [3.0, -1.0, 0.5],
+        [0.5, 1.0, 1.0],
+        [1.0, 1.0, -1.0],
+    ]
+    ys = [
+        [1.0],
+        [-1.0],
+        [-1.0],
+        [1.0],
+    ]
 
+    mlp = MLP(3, [4, 4, 1])
+    ypred = [mlp(x) for x in xs]
+
+    ys_vals = [[Value(y)] if not isinstance(y, list) else [Value(v) for v in y] for y in ys]
+    losses: list[Value] = [(a - d)**2 for yvs,ypr in zip(ys_vals, ypred) for d,a in zip(yvs,ypr)]
+    loss = sum(losses, start=Value(0));
+
+    print('actual:')
+    pprint(ypred)
+    print()
+
+    print('desired:')
+    pprint(ys)
+    print()
+
+    print('losses:')
+    pprint(losses)
+    print()
+
+    print('loss:', loss)
+    
+    loss.backward()
+
+    draw_dot(loss).render()
 
 if __name__ == '__main__': 
     main()
